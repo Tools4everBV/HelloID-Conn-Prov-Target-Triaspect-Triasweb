@@ -1,0 +1,62 @@
+[
+  {
+    "defaultValue": "",
+    "key": "ClientId",
+    "templateOptions": {
+      "description": "The client id to connect to the API",
+      "label": "ClientId",
+      "required": true
+    },
+    "type": "input"
+  },
+  {
+    "defaultValue": "",
+    "key": "ClientSecret",
+    "templateOptions": {
+      "description": "The client secret to connect to the API",
+      "label": "ClientSecret",
+      "required": true,
+      "type": "password"
+    },
+    "type": "input"
+  },
+  {
+    "defaultValue": "",
+    "key": "BaseUrl",
+    "templateOptions": {
+      "description": "The URL to the API.",
+      "label": "BaseUrl",
+      "required": true
+    },
+    "type": "input"
+  },
+  {
+    "defaultValue": "",
+    "key": "TokenBaseUrl",
+    "templateOptions": {
+      "description": "The URL to retrieve the API access token.",
+      "label": "TokenBaseUrl",
+      "required": true
+    },
+    "type": "input"
+  },
+  {
+    "defaultValue": "",
+    "key": "CertificatePath",
+    "templateOptions": {
+      "label": "Certificate (.PFX) Path",
+      "placeholder": "<FullPath to Certificate>",
+      "required": true
+    },
+    "type": "input"
+  },
+  {
+    "key": "certificatePassword",
+    "templateOptions": {
+      "label": "Certificate Password",
+      "required": true,
+      "type": "password"
+    },
+    "type": "input"
+  }
+]
