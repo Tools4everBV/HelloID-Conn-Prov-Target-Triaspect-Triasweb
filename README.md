@@ -26,6 +26,7 @@
       - [authorizedOrganizationCodes Configuration](#authorizedorganizationcodes-configuration)
     - [Account Reference](#account-reference)
   - [Remarks](#remarks)
+    - [Concurrent sessions](#concurrent-sessions)
     - [On premises](#on-premises)
     - [Account lifecycle](#account-lifecycle)
     - [AuthorizationOrganizationCodes](#authorizationorganizationcodes)
@@ -51,7 +52,7 @@ The following features are available:
 | **Resources**                             | ❌         | -                               |                    |
 | **Entitlement Import: Accounts**          | ✅         | -                               |                    |
 | **Entitlement Import: Permissions**       | ✅         | -                               |                    |
-| **Governance Reconciliation Resolutions** | ✅         | -                               |                    |
+| **Governance Reconciliation Resolutions** | ✅         | -                               | No Delete action   |
 
 ## Getting started
 
@@ -123,6 +124,9 @@ The account reference is populated with the property `id` property from _Triaswe
 > [!WARNING]
 > **HR sync off**: The Employee Sync (direct HR sync) must be disabled in Triasweb. Account and authorization management are handled by HelloID and the connector.
 
+### Concurrent sessions
+- **Concurrent sessions set to one**: Concurrent sessions should be set to one otherwise actions could interfere with each other.
+
 ### On premises
 - **Certificate**: The API requires a certificate to be sent with the requests. Because of this, the connector can only function when running on-premises.
 
@@ -156,7 +160,6 @@ The account reference is populated with the property `id` property from _Triaswe
 
 - **Grant and Revoke**: To grant and revoke roles for a user, the user update API request is used.
 - **Import permissions**: Since there is no dedicated API call for importing permissions, this is done based on the getPersons response and the role names it contains.
-- **AuthorizationOrganization permission**: There is a separate import script for AuthorizationOrganization located in the `permissions/AuthorizationOrganization` folder. This script is used only for reporting purposes. This is because AuthorizationOrganization is handled through the account lifecycle. See _AuthorizationOrganizationCodes in Account Lifecycle_ in [AuthorizationOrganizationCodes](#authorizationorganizationcodes).
 
 ### API endpoints
 
