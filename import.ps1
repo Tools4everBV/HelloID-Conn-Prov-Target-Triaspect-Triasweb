@@ -79,7 +79,7 @@ try {
         Accept         = 'application/json'
     }
 
-    $pageSize = 100
+    $pageSize = 50
     $pageNumber = 1
     $importedAccounts = @()
     do {

@@ -79,7 +79,7 @@ try {
     }
 
     Write-Information 'Starting permission data import'
-    $pageSize = 100
+    $pageSize = 50
     $pageNumber = 1
     $importedAccounts = [System.Collections.Generic.List[object]]::new()
     do {
