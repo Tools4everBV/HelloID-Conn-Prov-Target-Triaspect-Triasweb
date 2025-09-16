@@ -1,5 +1,5 @@
 ################################################################
-# HelloID-Conn-Prov-Target-Triaspect-Triasweb-GrantPermission-Group
+# HelloID-Conn-Prov-Target-Triaspect-Triasweb-Permissions-Roles-Grant
 # PowerShell V2
 ################################################################
 
