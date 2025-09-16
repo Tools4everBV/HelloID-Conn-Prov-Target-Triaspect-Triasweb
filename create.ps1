@@ -6,10 +6,6 @@
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-# Script Mapping lookup values
-# Lookup values which are used in the mapping to determine the authorizationOrganizationCodes
-$authorizationOrganizationCodesLookupKey = { $_.CostCenter.code } # Mandatory
-
 #region functions
 function Resolve-TriaswebError {
     [CmdletBinding()]
@@ -125,13 +121,6 @@ try {
     # Process
     switch ($action) {
         'CreateAccount' {
-            # Desired contract calculation (Also with preview modes)
-            [array]$desiredContracts = $personContext.person.contracts | Where-Object { $_.Context.InConditions -eq $true }
-            if ($actionContext.DryRun -eq $true) { [array]$desiredContracts = $personContext.person.contracts }
-            if ($desiredContracts.length -lt 1) { throw 'No Contracts in scope [InConditions] found!' }
-
-            $actionContext.Data.authorizedOrganizationCodes += @(($desiredContracts | Select-Object $authorizationOrganizationCodesLookupKey).$authorizationOrganizationCodesLookupKey | Get-Unique)
-
             $splatCreateParams = @{
                 Uri         = "$($actionContext.Configuration.BaseUrl)/api/users"
                 Method      = 'POST'
@@ -143,11 +132,7 @@ try {
             if (-not($actionContext.DryRun -eq $true)) {
                 Write-Information 'Creating, disabling and correlating Triasweb account'
                 $createdAccount = (Invoke-RestMethod @splatCreateParams).data
-
-                # Remove default $null value in authorizedOrganizationCodes
-                $createdAccount.authorizedOrganizationCodes = @($createdAccount.authorizedOrganizationCodes | Where-Object { $_ -ne $null })
-
-                $outputContext.Data = ($createdAccount | Select-Object -Property $actionContext.Data.PSObject.Properties.Name)
+                $outputContext.Data = ($createdAccount | Select-Object -Property $outputContext.Data.PSObject.Properties.Name)
                 $outputContext.AccountReference = $createdAccount.Id
             }
             else {
@@ -175,11 +160,7 @@ try {
 
         'CorrelateAccount' {
             Write-Information 'Correlating Triasweb account'
-
-            # Remove default $null value in authorizedOrganizationCodes
-            $correlatedAccount.authorizedOrganizationCodes = @($correlatedAccount.authorizedOrganizationCodes | Where-Object { $_ -ne $null })
-
-            $outputContext.Data = ($correlatedAccount | Select-Object -Property $actionContext.data.PSObject.Properties.Name)
+            $outputContext.Data = ($correlatedAccount | Select-Object -Property $outputContext.data.PSObject.Properties.Name)
             $outputContext.AccountReference = $correlatedAccount.Id
             $outputContext.AccountCorrelated = $true
             $auditLogMessage = "Correlated account: [$($outputContext.AccountReference)] on field: [$($correlationField)] with value: [$($correlationValue)]"

@@ -6,10 +6,6 @@
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-# Script Mapping lookup values
-# Lookup values which are used in the mapping to determine the authorizationOrganizationCodes
-$authorizationOrganizationCodesLookupKey = { $_.CostCenter.code } # Mandatory
-
 #region functions
 function Resolve-TriaswebError {
     [CmdletBinding()]
@@ -106,36 +102,16 @@ try {
 
     if ($null -ne $correlatedAccount) {
         $correlatedAccount.authorizedOrganizationCodes = @($correlatedAccount.authorizedOrganizationCodes | Where-Object { $_ -ne $null })
-        $outputContext.PreviousData = ($correlatedAccount | Select-Object -Property $actionContext.data.PSObject.Properties.Name)
+        $outputContext.PreviousData = ($correlatedAccount | Select-Object -Property $outputContext.data.PSObject.Properties.Name)
 
-        # Desired contract calculation (Also with preview modes)
-        [array]$desiredContracts = $personContext.person.contracts | Where-Object { $_.Context.InConditions -eq $true }
-        if ($actionContext.DryRun -eq $true) { [array]$desiredContracts = $personContext.person.contracts }
-        if ($desiredContracts.length -lt 1) { throw 'No Contracts in scope [InConditions] found!' }
-
-        # Populate empty arrays from actionContext with correct value's
-        $actionContext.Data.authorizedOrganizationCodes += @(($desiredContracts | Select-Object $authorizationOrganizationCodesLookupKey).$authorizationOrganizationCodesLookupKey | Get-Unique)
         $actionContext.Data.roleNames = $correlatedAccount.roleNames
-
-        # Populate outputContext.Data with actionContext.Data to prevent misleading audit logs in HelloID
-        $outputContext.Data = $actionContext.Data
+        $actionContext.Data.authorizedOrganizationCodes = $correlatedAccount.authorizedOrganizationCodes
 
         $splatCompareProperties = @{
             ReferenceObject  = @($correlatedAccount.PSObject.Properties)
-            DifferenceObject = @(($actionContext.Data | Select-Object -Property * -ExcludeProperty authorizedOrganizationCodes).PSObject.Properties)
+            DifferenceObject = @($actionContext.Data.PSObject.Properties)
         }
         $propertiesChanged = Compare-Object @splatCompareProperties -PassThru | Where-Object { $_.SideIndicator -eq '=>' }
-
-        if ($correlatedAccount.authorizedOrganizationCodes.count -gt 0) {
-            $splatCompareAuthorizedOrganizationCodes = @{
-                ReferenceObject  = ($correlatedAccount.authorizedOrganizationCodes | Where-Object { $_ -ne $null })
-                DifferenceObject = ($actionContext.Data.authorizedOrganizationCodes | Where-Object { $_ -ne $null })
-            }
-            $authorizedOrganizationCodesChanged = Compare-Object @splatCompareAuthorizedOrganizationCodes -PassThru | Where-Object { $_.SideIndicator -eq '=>' }
-        }
-        elseif ($actionContext.Data.authorizedOrganizationCodes.count -gt 0) {
-            $authorizedOrganizationCodesChanged = $actionContext.Data.authorizedOrganizationCodes
-        }
 
         if ($propertiesChanged -or $authorizedOrganizationCodesChanged) {
             $action = 'UpdateAccount'
@@ -153,10 +129,6 @@ try {
         'UpdateAccount' {
             Write-Information "Account property(s) required to update: $($propertiesChanged.Name -join ', ')"
 
-            if ($authorizedOrganizationCodesChanged) {
-                Write-Information "Account property authorizedOrganizationCodes required to update, new value will be: $($actionContext.Data.authorizedOrganizationCodes -join ', ')"
-            }
-
             $splatUpdateParams = @{
                 Uri         = "$($actionContext.Configuration.BaseUrl)/api/users?method=id&value=$($actionContext.References.Account)"
                 Method      = 'PUT'
@@ -167,7 +139,8 @@ try {
 
             if (-not($actionContext.DryRun -eq $true)) {
                 Write-Information "Updating Triasweb account with accountReference: [$($actionContext.References.Account)]"
-                $null = Invoke-RestMethod @splatUpdateParams
+                $updatedAccount = (Invoke-RestMethod @splatUpdateParams).data
+                $outputContext.Data = ($updatedAccount | Select-Object -Property $outputContext.data.PSObject.Properties.Name)
             }
             else {
                 Write-Information "[DryRun] Update Triasweb account with accountReference: [$($actionContext.References.Account)], will be executed during enforcement"
@@ -178,18 +151,12 @@ try {
                     Message = "Update account was successful, Account property(s) updated: [$($propertiesChanged.name -join ', ')]"
                     IsError = $false
                 })
-
-            if ($authorizedOrganizationCodesChanged) {
-                $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Update account was successful, New authorizedOrganizationCodes value [$($actionContext.Data.authorizedOrganizationCodes -join ', ')]"
-                        IsError = $false
-                    })
-            }
             break
         }
 
         'NoChanges' {
             Write-Information "No changes to Triasweb account with accountReference: [$($actionContext.References.Account)]"
+            $outputContext.Data = ($correlatedAccount | Select-Object -Property $outputContext.data.PSObject.Properties.Name)
             $outputContext.Success = $true
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     Message = 'No changes will be made to the account during enforcement'

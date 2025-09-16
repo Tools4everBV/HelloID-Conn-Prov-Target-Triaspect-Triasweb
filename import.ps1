@@ -100,7 +100,7 @@ try {
 
     # Map the imported data to the account field mappings
     foreach ($importedAccount in $importedAccounts) {
-        $data = $importedAccount
+        $data = $importedAccount | Select-Object -Property $actionContext.ImportFields
 
         # Enabled has a -not filter because the API uses an isDisabled property, which is the exact opposite of the enabled state used by HelloID.
         Write-Output @{
