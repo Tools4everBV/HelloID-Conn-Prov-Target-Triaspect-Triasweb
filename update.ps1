@@ -27,7 +27,8 @@ function Resolve-TriaswebError {
         }
         if (-not [string]::IsNullOrEmpty($ErrorObject.ErrorDetails.Message)) {
             $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails.Message
-        } elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
+        }
+        elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
             if ($null -ne $ErrorObject.Exception.Response) {
                 $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
                 if (-not [string]::IsNullOrEmpty($streamReaderResponse)) {
@@ -39,12 +40,15 @@ function Resolve-TriaswebError {
             $errorDetailsObject = ($httpErrorObj.ErrorDetails | ConvertFrom-Json)
             if ($null -ne $errorDetailsObject.Details) {
                 $httpErrorObj.FriendlyMessage = $errorDetailsObject.Details
-            } elseif ($null -ne $errorDetailsObject.error) {
+            }
+            elseif ($null -ne $errorDetailsObject.error) {
                 $httpErrorObj.FriendlyMessage = $errorDetailsObject.error
-            } else {
+            }
+            else {
                 $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
             }
-        } catch {
+        }
+        catch {
             $httpErrorObj.FriendlyMessage = "Error: [$($httpErrorObj.ErrorDetails)] [$($_.Exception.Message)]"
         }
         Write-Output $httpErrorObj
@@ -93,7 +97,8 @@ try {
     }
     try {
         $correlatedAccount = (Invoke-RestMethod @splatGetUser).data
-    } catch {
+    }
+    catch {
         if (-not($_.Exception.Response.StatusCode -eq 404)) {
             throw $_
         }
@@ -127,16 +132,19 @@ try {
                 DifferenceObject = ($actionContext.Data.authorizedOrganizationCodes | Where-Object { $_ -ne $null })
             }
             $authorizedOrganizationCodesChanged = Compare-Object @splatCompareAuthorizedOrganizationCodes -PassThru | Where-Object { $_.SideIndicator -eq '=>' }
-        } elseif ($actionContext.Data.authorizedOrganizationCodes.count -gt 0) {
+        }
+        elseif ($actionContext.Data.authorizedOrganizationCodes.count -gt 0) {
             $authorizedOrganizationCodesChanged = $actionContext.Data.authorizedOrganizationCodes
         }
 
         if ($propertiesChanged -or $authorizedOrganizationCodesChanged) {
             $action = 'UpdateAccount'
-        } else {
+        }
+        else {
             $action = 'NoChanges'
         }
-    } else {
+    }
+    else {
         $action = 'NotFound'
     }
 
@@ -160,7 +168,8 @@ try {
             if (-not($actionContext.DryRun -eq $true)) {
                 Write-Information "Updating Triasweb account with accountReference: [$($actionContext.References.Account)]"
                 $null = Invoke-RestMethod @splatUpdateParams
-            } else {
+            }
+            else {
                 Write-Information "[DryRun] Update Triasweb account with accountReference: [$($actionContext.References.Account)], will be executed during enforcement"
             }
 
@@ -199,7 +208,8 @@ try {
             break
         }
     }
-} catch {
+}
+catch {
     $outputContext.Success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
@@ -207,7 +217,8 @@ try {
         $errorObj = Resolve-TriaswebError -ErrorObject $ex
         $auditMessage = "Could not update Triasweb account. Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-    } else {
+    }
+    else {
         $auditMessage = "Could not update Triasweb account. Error: $($ex.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }

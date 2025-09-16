@@ -23,7 +23,8 @@ function Resolve-TriaswebError {
         }
         if (-not [string]::IsNullOrEmpty($ErrorObject.ErrorDetails.Message)) {
             $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails.Message
-        } elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
+        }
+        elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
             if ($null -ne $ErrorObject.Exception.Response) {
                 $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
                 if (-not [string]::IsNullOrEmpty($streamReaderResponse)) {
@@ -35,12 +36,15 @@ function Resolve-TriaswebError {
             $errorDetailsObject = ($httpErrorObj.ErrorDetails | ConvertFrom-Json)
             if ($null -ne $errorDetailsObject.Details) {
                 $httpErrorObj.FriendlyMessage = $errorDetailsObject.Details
-            } elseif ($null -ne $errorDetailsObject.error) {
+            }
+            elseif ($null -ne $errorDetailsObject.error) {
                 $httpErrorObj.FriendlyMessage = $errorDetailsObject.error
-            } else {
+            }
+            else {
                 $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
             }
-        } catch {
+        }
+        catch {
             $httpErrorObj.FriendlyMessage = "Error: [$($httpErrorObj.ErrorDetails)] [$($_.Exception.Message)]"
         }
         Write-Output $httpErrorObj
@@ -89,7 +93,8 @@ try {
     }
     try {
         $correlatedAccount = (Invoke-RestMethod @splatGetUser).data
-    } catch {
+    }
+    catch {
         if (-not($_.Exception.Response.StatusCode -eq 404)) {
             throw $_
         }
@@ -97,7 +102,8 @@ try {
 
     if ($null -ne $correlatedAccount) {
         $action = 'RevokePermission'
-    } else {
+    }
+    else {
         $action = 'NotFound'
     }
 
@@ -119,7 +125,8 @@ try {
                 if (-not($actionContext.DryRun -eq $true)) {
                     Write-Information "Revoking Triasweb permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)]"
                     $null = Invoke-RestMethod @splatRevokeParams
-                } else {
+                }
+                else {
                     Write-Information "[DryRun] Revoke Triasweb permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)], will be executed during enforcement"
                 }
 
@@ -128,7 +135,8 @@ try {
                         Message = "Revoke permission [$($actionContext.PermissionDisplayName)] was successful"
                         IsError = $false
                     })
-            } else {
+            }
+            else {
                 Write-Information "Triasweb permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)] could not be found, indicating that it may have been revoked"
 
                 $outputContext.Success = $true
@@ -149,7 +157,8 @@ try {
             break
         }
     }
-} catch {
+}
+catch {
     $outputContext.success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
@@ -157,7 +166,8 @@ try {
         $errorObj = Resolve-TriaswebError -ErrorObject $ex
         $auditMessage = "Could not revoke Triasweb permission. Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-    } else {
+    }
+    else {
         $auditMessage = "Could not revoke Triasweb permission. Error: $($_.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }

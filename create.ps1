@@ -27,7 +27,8 @@ function Resolve-TriaswebError {
         }
         if (-not [string]::IsNullOrEmpty($ErrorObject.ErrorDetails.Message)) {
             $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails.Message
-        } elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
+        }
+        elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
             if ($null -ne $ErrorObject.Exception.Response) {
                 $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
                 if (-not [string]::IsNullOrEmpty($streamReaderResponse)) {
@@ -39,12 +40,15 @@ function Resolve-TriaswebError {
             $errorDetailsObject = ($httpErrorObj.ErrorDetails | ConvertFrom-Json)
             if ($null -ne $errorDetailsObject.Details) {
                 $httpErrorObj.FriendlyMessage = $errorDetailsObject.Details
-            } elseif ($null -ne $errorDetailsObject.error) {
+            }
+            elseif ($null -ne $errorDetailsObject.error) {
                 $httpErrorObj.FriendlyMessage = $errorDetailsObject.error
-            } else {
+            }
+            else {
                 $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
             }
-        } catch {
+        }
+        catch {
             $httpErrorObj.FriendlyMessage = "Error: [$($httpErrorObj.ErrorDetails)] [$($_.Exception.Message)]"
         }
         Write-Output $httpErrorObj
@@ -101,7 +105,8 @@ try {
         }
         try {
             $correlatedAccount = (Invoke-RestMethod @splatGetUser).data
-        } catch {
+        }
+        catch {
             if (-not($_.Exception.Response.StatusCode -eq 404)) {
                 throw $_
             }
@@ -109,9 +114,11 @@ try {
     }
     if (($correlatedAccount | Measure-Object).count -eq 0) {
         $action = 'CreateAccount'
-    } elseif (($correlatedAccount | Measure-Object).count -eq 1) {
+    }
+    elseif (($correlatedAccount | Measure-Object).count -eq 1) {
         $action = 'CorrelateAccount'
-    } elseif (($correlatedAccount | Measure-Object).count -gt 1) {
+    }
+    elseif (($correlatedAccount | Measure-Object).count -gt 1) {
         throw "Multiple accounts found for person where $correlationField is: [$correlationValue]"
     }
 
@@ -142,7 +149,8 @@ try {
 
                 $outputContext.Data = ($createdAccount | Select-Object -Property $actionContext.Data.PSObject.Properties.Name)
                 $outputContext.AccountReference = $createdAccount.Id
-            } else {
+            }
+            else {
                 Write-Information '[DryRun] Create and correlate Triasweb account, will be executed during enforcement'
             }
 
@@ -156,7 +164,8 @@ try {
             if (-not($actionContext.DryRun -eq $true)) {
                 Write-Information 'Creating and correlating Triasweb account'
                 $null = Invoke-RestMethod @splatDisableUserParams
-            } else {
+            }
+            else {
                 Write-Information '[DryRun] Disable Triasweb account, will be executed during enforcement'
             }
 
@@ -184,7 +193,8 @@ try {
             Message = $auditLogMessage
             IsError = $false
         })
-} catch {
+}
+catch {
     $outputContext.success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
@@ -192,7 +202,8 @@ try {
         $errorObj = Resolve-TriaswebError -ErrorObject $ex
         $auditMessage = "Could not create or correlate Triasweb account. Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-    } else {
+    }
+    else {
         $auditMessage = "Could not create or correlate Triasweb account. Error: $($ex.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
