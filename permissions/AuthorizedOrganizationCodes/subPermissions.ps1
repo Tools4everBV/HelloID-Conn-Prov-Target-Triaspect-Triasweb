@@ -1,5 +1,5 @@
 ################################################################
-# HelloID-Conn-Prov-Target-Triaspect-Triasweb-SubPermissions-Authorization-Organization
+# HelloID-Conn-Prov-Target-Triaspect-Triasweb-SubPermissions-Authorization-Organization-Codes
 # PowerShell V2
 ################################################################
 # Enable TLS1.2
@@ -98,11 +98,11 @@ try {
         $correlatedAccount = (Invoke-RestMethod @splatGetUser).data
     }
     catch {
-        if (-not($_.Exception.Response.StatusCode -eq 404)) {
-            throw $_
+        if ($_.Exception.Response.StatusCode -eq 404) {
+            $correlatedAccount = $null
         }
         else {
-            throw "Triasweb account: [$($actionContext.References.Account)] could not be found, indicating that it may have been deleted"
+            throw $_
         }
     }
 
@@ -138,8 +138,11 @@ try {
     else {
         $authorizedOrganizationCodesChanged = $true
     }
-    $authorizedOrganizationCodesChanged = $true
-    if ($authorizedOrganizationCodesChanged) {
+
+    if ([string]::IsNullOrEmpty($correlatedAccount)) {
+        $action = 'NotFound'
+    }
+    elseif ($authorizedOrganizationCodesChanged) {
         $action = 'UpdateAccount'
     }
     else {
@@ -179,8 +182,19 @@ try {
         'NoChanges' {
             Write-Information "No changes to Triasweb account with accountReference: [$($actionContext.References.Account)]"
             $outputContext.Success = $true
+            break
+        }
+
+        'NotFound' {
+            Write-Information "Triasweb account: [$($actionContext.References.Account)] could not be found, indicating that it may have been deleted"
+            if ($actionContext.Operation -eq "revoke") {
+                $outputContext.Success = $true
+            }
+            else {
+                $outputContext.Success = $false
+            }
             $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = 'No changes will be made to the account during enforcement'
+                    Message = "Triasweb account: [$($actionContext.References.Account)] could not be found, indicating that it may have been deleted"
                     IsError = $false
                 })
             break

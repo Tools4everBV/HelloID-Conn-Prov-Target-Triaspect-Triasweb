@@ -112,7 +112,7 @@ try {
         'RevokePermission' {
             if ($correlatedAccount.roleNames -contains $actionContext.References.Permission.Reference) {
                 $correlatedAccount.roleNames = @($correlatedAccount.roleNames | Where-Object { $_ -ne $actionContext.References.Permission.Reference })
-                $correlatedAccount.authorizedOrganizationCodes = @($correlatedAccount.authorizedOrganizationCodes | Where-Object { $_ -ne $null })
+                $correlatedAccount.authorizedOrganizationCodes = @($correlatedAccount.authorizedOrganizationCodes | Where-Object { ($_ -ne $null) -and ($_ -notmatch ',') })
 
                 $splatRevokeParams = @{
                     Uri         = "$($actionContext.Configuration.BaseUrl)/api/users?method=id&value=$($actionContext.References.Account)"
@@ -123,25 +123,25 @@ try {
                 }
 
                 if (-not($actionContext.DryRun -eq $true)) {
-                    Write-Information "Revoking Triasweb permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)]"
+                    Write-Information "Revoking Triasweb permission: [$($actionContext.References.Permission.Reference)]"
                     $null = Invoke-RestMethod @splatRevokeParams
                 }
                 else {
-                    Write-Information "[DryRun] Revoke Triasweb permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)], will be executed during enforcement"
+                    Write-Information "[DryRun] Revoke Triasweb permission: [$($actionContext.References.Permission.Reference)], will be executed during enforcement"
                 }
 
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Revoke permission [$($actionContext.PermissionDisplayName)] was successful"
+                        Message = "Revoke permission [$($actionContext.References.Permission.Reference)] was successful"
                         IsError = $false
                     })
             }
             else {
-                Write-Information "Triasweb permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)] could not be found, indicating that it may have been revoked"
+                Write-Information "Triasweb permission: [$($actionContext.References.Permission.Reference)] could not be found, indicating that it may have been revoked"
 
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Triasweb permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)] could not be found, indicating that it may have been revoked"
+                        Message = "Triasweb permission: [$($actionContext.References.Permission.Reference)] could not be found, indicating that it may have been revoked"
                         IsError = $false
                     })
             }

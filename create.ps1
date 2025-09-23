@@ -132,6 +132,10 @@ try {
             if (-not($actionContext.DryRun -eq $true)) {
                 Write-Information 'Creating, disabling and correlating Triasweb account'
                 $createdAccount = (Invoke-RestMethod @splatCreateParams).data
+
+                # Remove default $null value in authorizedOrganizationCodes
+                $createdAccount.authorizedOrganizationCodes = @($createdAccount.authorizedOrganizationCodes | Where-Object { $_ -ne $null })
+
                 $outputContext.Data = ($createdAccount | Select-Object -Property $outputContext.Data.PSObject.Properties.Name)
                 $outputContext.AccountReference = $createdAccount.Id
             }
@@ -160,6 +164,10 @@ try {
 
         'CorrelateAccount' {
             Write-Information 'Correlating Triasweb account'
+
+            # Remove default $null value in authorizedOrganizationCodes
+            $correlatedAccount.authorizedOrganizationCodes = @($correlatedAccount.authorizedOrganizationCodes | Where-Object { $_ -ne $null })
+
             $outputContext.Data = ($correlatedAccount | Select-Object -Property $outputContext.data.PSObject.Properties.Name)
             $outputContext.AccountReference = $correlatedAccount.Id
             $outputContext.AccountCorrelated = $true

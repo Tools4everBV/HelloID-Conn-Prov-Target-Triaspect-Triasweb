@@ -101,7 +101,7 @@ try {
     }
 
     if ($null -ne $correlatedAccount) {
-        $correlatedAccount.authorizedOrganizationCodes = @($correlatedAccount.authorizedOrganizationCodes | Where-Object { $_ -ne $null })
+        $correlatedAccount.authorizedOrganizationCodes = @($correlatedAccount.authorizedOrganizationCodes | Where-Object { ($_ -ne $null) -and ($_ -notmatch ',') })
         $outputContext.PreviousData = ($correlatedAccount | Select-Object -Property $outputContext.data.PSObject.Properties.Name)
 
         $actionContext.Data.roleNames = $correlatedAccount.roleNames

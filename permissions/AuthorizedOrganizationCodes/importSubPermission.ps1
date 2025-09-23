@@ -1,10 +1,14 @@
 ################################################################
-# HelloID-Conn-Prov-Target-Triaspect-Triasweb-Permissions-Roles-Grant
+# HelloID-Conn-Prov-Target-Triaspect-Triasweb-ImportSubPermission-Authorization-Organization-Codes
 # PowerShell V2
 ################################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+
+# Configure, must be the same as the values used in retrieve permissions
+$permissionReference = 'authorizationOrganizationCodes'
+$permissionDisplayName = 'authorizationOrganizationCodes'
 
 #region functions
 function Resolve-TriaswebError {
@@ -52,13 +56,7 @@ function Resolve-TriaswebError {
 }
 #endregion
 
-# Begin
 try {
-    # Verify if [aRef] has a value
-    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
-        throw 'The account reference could not be found'
-    }
-
     $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($actionContext.Configuration.CertificatePath, $actionContext.Configuration.CertificatePassword, 'UserKeySet')
     if ($certificate.NotAfter -le (Get-Date)) {
         throw "Certificate has expired on $($certificate.NotAfter)..."
@@ -84,95 +82,76 @@ try {
         'content-type' = 'application/json'
     }
 
-    Write-Information 'Verifying if a Triasweb account exists'
-    $splatGetUser = @{
-        Uri         = "$($actionContext.Configuration.BaseUrl)/api/users?method=id&value=$($actionContext.References.Account)"
-        Method      = 'Get'
-        Certificate = $certificate
-        Headers     = $headers
-    }
-    try {
-        $correlatedAccount = (Invoke-RestMethod @splatGetUser).data
-    }
-    catch {
-        if (-not($_.Exception.Response.StatusCode -eq 404)) {
-            throw $_
+    Write-Information 'Starting permission data import'
+    $pageSize = 50
+    $pageNumber = 1
+    $importedAccounts = [System.Collections.Generic.List[object]]::new()
+    do {
+        $splatGetUsers = @{
+            Uri         = "$($actionContext.Configuration.BaseUrl)/api/users/list?pageNumber=$($pageNumber)&pageSize=$($pageSize)"
+            Method      = 'Get'
+            Certificate = $certificate
+            Headers     = $headers
         }
-    }
+        $response = Invoke-RestMethod @splatGetUsers
 
-    if ($null -ne $correlatedAccount) {
-        $action = 'GrantPermission'
-    }
-    else {
-        $action = 'NotFound'
-    }
+        if ($response.data) {
+            $importedAccounts.AddRange($response.data)
+        }
 
-    # Process
-    switch ($action) {
-        'GrantPermission' {
-            if (-not($correlatedAccount.roleNames -contains $actionContext.References.Permission.Reference)) {
-                $correlatedAccount.roleNames += $actionContext.References.Permission.Reference
-                $correlatedAccount.authorizedOrganizationCodes = @($correlatedAccount.authorizedOrganizationCodes | Where-Object { ($_ -ne $null) -and ($_ -notmatch ',') })
+        $pageNumber++
+    } while ($pageNumber -le $response.totalPages)
 
-                $splatGrantParams = @{
-                    Uri         = "$($actionContext.Configuration.BaseUrl)/api/users?method=id&value=$($actionContext.References.Account)"
-                    Method      = 'PUT'
-                    Certificate = $certificate
-                    Headers     = $headers
-                    Body        = ([System.Text.Encoding]::UTF8.GetBytes(($correlatedAccount | ConvertTo-Json -Depth 10)))
+    # Retrieve all unique authorizedOrganizationCodes from accounts property in accounts.
+    $importedPermissions = @{}
+    foreach ($importedAccount in $importedAccounts) {
+        foreach ($authorizedOrganizationCodes in $importedAccount.authorizedOrganizationCodes) {
+            if (![string]::IsNullOrWhiteSpace($authorizedOrganizationCodes)) {
+                if (-not $importedPermissions.ContainsKey($authorizedOrganizationCodes)) {
+                    $importedPermissions[$authorizedOrganizationCodes] = @()
                 }
-
-                if (-not($actionContext.DryRun -eq $true)) {
-                    Write-Information "Granting Triasweb permission: [$($actionContext.References.Permission.Reference)]"
-                    $null = Invoke-RestMethod @splatGrantParams
+                if ($importedAccount.id -notin $importedPermissions[$authorizedOrganizationCodes]) {
+                    $importedPermissions[$authorizedOrganizationCodes] += $importedAccount.id
                 }
-                else {
-                    Write-Information "[DryRun] Grant Triasweb permission: [$($actionContext.References.Permission.Reference)], will be executed during enforcement"
-                }
-
-                $outputContext.Success = $true
-                $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Grant permission [$($actionContext.References.Permission.Reference)] was successful"
-                        IsError = $false
-                    })
-            }
-            else {
-                Write-Information "Triasweb permission: [$($actionContext.References.Permission.Reference)] already granted"
-
-                $outputContext.Success = $true
-                $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Triasweb permission: [$($actionContext.References.Permission.Reference)] already granted"
-                        IsError = $false
-                    })
             }
         }
+    }
 
-        'NotFound' {
-            Write-Information "Triasweb account: [$($actionContext.References.Account)] could not be found, indicating that it may have been deleted"
-            $outputContext.Success = $false
-            $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Triasweb account: [$($actionContext.References.Account)] could not be found, indicating that it may have been deleted"
-                    IsError = $true
-                })
-            break
+    foreach ($importedPermission in $importedPermissions.GetEnumerator()) {
+        $subPermissionDisplayName = $($importedPermission.Key).substring(0, [System.Math]::Min(100, $($importedPermission.Key).Length))
+        $permission = @{
+            PermissionReference      = @{
+                Reference = $permissionReference
+            }       
+            DisplayName              = $permissionDisplayName
+            AccountReferences        = $importedPermission.Value
+            SubPermissionReference   = @{
+                Id = $importedPermission.Key
+            }
+            SubPermissionDisplayName = $subPermissionDisplayName
+        }
+
+        $membersOfRetrievedPermission = [System.Collections.Generic.List[string]]($importedPermission.Value)
+        # Batch permissions based on AccountReference to ensure the output object do not exceed the limit.
+        $batchSize = 500
+        for ($i = 0; $i -lt $membersOfRetrievedPermission.Count; $i += $batchSize) {
+            $permission.AccountReferences = [array]($membersOfRetrievedPermission.GetRange($i, [Math]::Min($batchSize, $membersOfRetrievedPermission.Count - $i)))
+
+            Write-Output $permission
         }
     }
+    Write-Information 'Permission data import completed'
 }
 catch {
-    $outputContext.success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-TriaswebError -ErrorObject $ex
-        $auditMessage = "Could not grant Triasweb permission. Error: $($errorObj.FriendlyMessage)"
+        Write-Warning "Could not import Triasweb permission. Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     }
     else {
-        $auditMessage = "Could not grant Triasweb permission. Error: $($_.Exception.Message)"
+        Write-Warning "Could not import Triasweb permission. Error: $($ex.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
-    $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Message = $auditMessage
-            IsError = $true
-        })
 }
