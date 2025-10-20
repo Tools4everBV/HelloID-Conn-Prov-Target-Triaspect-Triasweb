@@ -25,7 +25,6 @@
     - [Concurrent sessions](#concurrent-sessions)
     - [On premises](#on-premises)
     - [Account lifecycle](#account-lifecycle)
-    - [AuthorizationOrganizationCodes](#authorizationorganizationcodes)
     - [Permissions](#permissions)
       - [Roles](#roles)
       - [Permission list](#permission-list)
@@ -125,10 +124,6 @@ The account reference is populated with the property `id` property from _Triaswe
 - **No delete**: The API does not support a delete request for users; hence, there is no delete script
 - **Unique email**: The email property in _Triasweb_ needs to be an unique value.
 
-### AuthorizationOrganizationCodes
-- **Null value**: `AuthorizationOrganizationCodes` can contain a *null* value when no *sync value* is configured in the OE settings of _Triasweb_. These values must be filtered out before processing the property to avoid errors.  
-- **Comma-separated value**: `AuthorizationOrganizationCodes` can contain multiple values that are returned as a single comma-separated string. _Triasweb_ does not correctly recognize this. These values must also be filtered out before processing the property to avoid errors.  
-  
 ### Permissions
 #### Roles
 - **Default value**: The api requires the property `roleNames` to be included in the post request when creating a user. In the fieldmapping this property is mapped to an empty array so that _Triasweb_ can automatically grant the default role. This can later be changed through the permissions.
@@ -156,6 +151,8 @@ The account reference is populated with the property `id` property from _Triaswe
 - **Dynamic permissions**: The `authorizedOrganizationCodes` can be dynamically synced to _Triasweb_ based on the conditions defined in the business rules. The value is stored as a sub-permission and is used in all future actions to determine whether an update is required.
 - **Grant and Revoke**: To grant and revoke `authorizedOrganizationCodes` for a user, the user update API request is used.
 - **Import permissions**: Since there is no dedicated API call for importing `authorizedOrganizationCodes`, this is done based on the getPersons response and the role names it contains.
+- **Null value**: `AuthorizationOrganizationCodes` can contain a *null* value when no *sync value* is configured in the OE settings of _Triasweb_. These values must be filtered out before processing the property to avoid errors.  
+- **Comma-separated value**: `AuthorizationOrganizationCodes` can contain multiple values that are returned as a single comma-separated string. _Triasweb_ does not correctly recognize this. These values must also be filtered out before processing the property to avoid errors.  
 
 ### API endpoints
 
