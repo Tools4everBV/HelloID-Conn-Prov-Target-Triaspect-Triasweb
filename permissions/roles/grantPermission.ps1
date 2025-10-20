@@ -1,5 +1,5 @@
 ################################################################
-# HelloID-Conn-Prov-Target-Triaspect-Triasweb-GrantPermission-Group
+# HelloID-Conn-Prov-Target-Triaspect-Triasweb-Permissions-Roles-Grant
 # PowerShell V2
 ################################################################
 
@@ -23,7 +23,8 @@ function Resolve-TriaswebError {
         }
         if (-not [string]::IsNullOrEmpty($ErrorObject.ErrorDetails.Message)) {
             $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails.Message
-        } elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
+        }
+        elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
             if ($null -ne $ErrorObject.Exception.Response) {
                 $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
                 if (-not [string]::IsNullOrEmpty($streamReaderResponse)) {
@@ -35,12 +36,15 @@ function Resolve-TriaswebError {
             $errorDetailsObject = ($httpErrorObj.ErrorDetails | ConvertFrom-Json)
             if ($null -ne $errorDetailsObject.Details) {
                 $httpErrorObj.FriendlyMessage = $errorDetailsObject.Details
-            } elseif ($null -ne $errorDetailsObject.error) {
+            }
+            elseif ($null -ne $errorDetailsObject.error) {
                 $httpErrorObj.FriendlyMessage = $errorDetailsObject.error
-            } else {
+            }
+            else {
                 $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
             }
-        } catch {
+        }
+        catch {
             $httpErrorObj.FriendlyMessage = "Error: [$($httpErrorObj.ErrorDetails)] [$($_.Exception.Message)]"
         }
         Write-Output $httpErrorObj
@@ -89,7 +93,8 @@ try {
     }
     try {
         $correlatedAccount = (Invoke-RestMethod @splatGetUser).data
-    } catch {
+    }
+    catch {
         if (-not($_.Exception.Response.StatusCode -eq 404)) {
             throw $_
         }
@@ -97,7 +102,8 @@ try {
 
     if ($null -ne $correlatedAccount) {
         $action = 'GrantPermission'
-    } else {
+    }
+    else {
         $action = 'NotFound'
     }
 
@@ -106,7 +112,7 @@ try {
         'GrantPermission' {
             if (-not($correlatedAccount.roleNames -contains $actionContext.References.Permission.Reference)) {
                 $correlatedAccount.roleNames += $actionContext.References.Permission.Reference
-                $correlatedAccount.authorizedOrganizationCodes = @($correlatedAccount.authorizedOrganizationCodes | Where-Object { $_ -ne $null })
+                $correlatedAccount.authorizedOrganizationCodes = @($correlatedAccount.authorizedOrganizationCodes | Where-Object { ($_ -ne $null) -and ($_ -notmatch ',') })
 
                 $splatGrantParams = @{
                     Uri         = "$($actionContext.Configuration.BaseUrl)/api/users?method=id&value=$($actionContext.References.Account)"
@@ -117,23 +123,25 @@ try {
                 }
 
                 if (-not($actionContext.DryRun -eq $true)) {
-                    Write-Information "Granting Triasweb permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)]"
+                    Write-Information "Granting Triasweb permission: [$($actionContext.References.Permission.Reference)]"
                     $null = Invoke-RestMethod @splatGrantParams
-                } else {
-                    Write-Information "[DryRun] Grant Triasweb permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)], will be executed during enforcement"
+                }
+                else {
+                    Write-Information "[DryRun] Grant Triasweb permission: [$($actionContext.References.Permission.Reference)], will be executed during enforcement"
                 }
 
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Grant permission [$($actionContext.PermissionDisplayName)] was successful"
+                        Message = "Grant permission [$($actionContext.References.Permission.Reference)] was successful"
                         IsError = $false
                     })
-            } else {
-                Write-Information "Triasweb permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)] already granted"
+            }
+            else {
+                Write-Information "Triasweb permission: [$($actionContext.References.Permission.Reference)] already granted"
 
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Triasweb permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)] already granted"
+                        Message = "Triasweb permission: [$($actionContext.References.Permission.Reference)] already granted"
                         IsError = $false
                     })
             }
@@ -149,7 +157,8 @@ try {
             break
         }
     }
-} catch {
+}
+catch {
     $outputContext.success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
@@ -157,7 +166,8 @@ try {
         $errorObj = Resolve-TriaswebError -ErrorObject $ex
         $auditMessage = "Could not grant Triasweb permission. Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-    } else {
+    }
+    else {
         $auditMessage = "Could not grant Triasweb permission. Error: $($_.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }

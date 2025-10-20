@@ -1,10 +1,14 @@
 ################################################################
-# HelloID-Conn-Prov-Target-Triaspect-Triasweb-ImportPermission-Group
+# HelloID-Conn-Prov-Target-Triaspect-Triasweb-ImportSubPermission-Authorization-Organization-Codes
 # PowerShell V2
 ################################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+
+# Configure, must be the same as the values used in retrieve permissions
+$permissionReference = 'authorizationOrganizationCodes'
+$permissionDisplayName = 'authorizationOrganizationCodes'
 
 #region functions
 function Resolve-TriaswebError {
@@ -23,7 +27,8 @@ function Resolve-TriaswebError {
         }
         if (-not [string]::IsNullOrEmpty($ErrorObject.ErrorDetails.Message)) {
             $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails.Message
-        } elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
+        }
+        elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
             if ($null -ne $ErrorObject.Exception.Response) {
                 $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
                 if (-not [string]::IsNullOrEmpty($streamReaderResponse)) {
@@ -35,12 +40,15 @@ function Resolve-TriaswebError {
             $errorDetailsObject = ($httpErrorObj.ErrorDetails | ConvertFrom-Json)
             if ($null -ne $errorDetailsObject.Details) {
                 $httpErrorObj.FriendlyMessage = $errorDetailsObject.Details
-            } elseif ($null -ne $errorDetailsObject.error) {
+            }
+            elseif ($null -ne $errorDetailsObject.error) {
                 $httpErrorObj.FriendlyMessage = $errorDetailsObject.error
-            } else {
+            }
+            else {
                 $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
             }
-        } catch {
+        }
+        catch {
             $httpErrorObj.FriendlyMessage = "Error: [$($httpErrorObj.ErrorDetails)] [$($_.Exception.Message)]"
         }
         Write-Output $httpErrorObj
@@ -75,45 +83,47 @@ try {
     }
 
     Write-Information 'Starting permission data import'
-    $pageSize = 100
+    $pageSize = 50
     $pageNumber = 1
-    $importedAccounts = [System.Collections.Generic.List[object]]::new()
+    $importedPermissions = @{}
     do {
         $splatGetUsers = @{
             Uri         = "$($actionContext.Configuration.BaseUrl)/api/users/list?pageNumber=$($pageNumber)&pageSize=$($pageSize)"
-            Method      = 'Get'
+            Method      = 'GET'
             Certificate = $certificate
             Headers     = $headers
         }
         $response = Invoke-RestMethod @splatGetUsers
 
         if ($response.data) {
-            $importedAccounts.AddRange($response.data)
+            foreach ($importedAccount in $response.data) {
+                foreach ($authorizedOrganizationCodes in $importedAccount.authorizedOrganizationCodes) {
+                    if (![string]::IsNullOrWhiteSpace($authorizedOrganizationCodes)) {
+                        if (-not $importedPermissions.ContainsKey($authorizedOrganizationCodes)) {
+                            $importedPermissions[$authorizedOrganizationCodes] = @()
+                        }
+                        if ($importedAccount.id -notin $importedPermissions[$authorizedOrganizationCodes]) {
+                            $importedPermissions[$authorizedOrganizationCodes] += $importedAccount.id
+                        }
+                    }
+                }
+            }
         }
-
         $pageNumber++
     } while ($pageNumber -le $response.totalPages)
 
-    # Retrieve all unique roleNames from accounts property in accounts.
-    $importedPermissions = @{}
-    foreach ($importedAccount in $importedAccounts) {
-        foreach ($role in $importedAccount.roleNames) {
-            if (![string]::IsNullOrWhiteSpace($role)) {
-                if (-not $importedPermissions.ContainsKey($role)) {
-                    $importedPermissions[$role] = @()
-                }
-                $importedPermissions[$role] += $importedAccount.id
-            }
-        }
-    }
-
     foreach ($importedPermission in $importedPermissions.GetEnumerator()) {
+        $subPermissionDisplayName = $($importedPermission.Key).substring(0, [System.Math]::Min(100, $($importedPermission.Key).Length))
         $permission = @{
-            DisplayName         = $importedPermission.Key
-            AccountReferences   = $importedPermission.Value
-            PermissionReference = @{
-                Reference = $importedPermission.Key
+            PermissionReference      = @{
+                Reference = $permissionReference
+            }       
+            DisplayName              = $permissionDisplayName
+            AccountReferences        = $importedPermission.Value
+            SubPermissionReference   = @{
+                Id = $importedPermission.Key
             }
+            SubPermissionDisplayName = $subPermissionDisplayName
         }
 
         $membersOfRetrievedPermission = [System.Collections.Generic.List[string]]($importedPermission.Value)
@@ -121,19 +131,20 @@ try {
         $batchSize = 500
         for ($i = 0; $i -lt $membersOfRetrievedPermission.Count; $i += $batchSize) {
             $permission.AccountReferences = [array]($membersOfRetrievedPermission.GetRange($i, [Math]::Min($batchSize, $membersOfRetrievedPermission.Count - $i)))
-
             Write-Output $permission
         }
     }
     Write-Information 'Permission data import completed'
-} catch {
+}
+catch {
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-TriaswebError -ErrorObject $ex
         Write-Warning "Could not import Triasweb permission. Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-    } else {
+    }
+    else {
         Write-Warning "Could not import Triasweb permission. Error: $($ex.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }

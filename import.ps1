@@ -23,7 +23,8 @@ function Resolve-TriaswebError {
         }
         if (-not [string]::IsNullOrEmpty($ErrorObject.ErrorDetails.Message)) {
             $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails.Message
-        } elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
+        }
+        elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
             if ($null -ne $ErrorObject.Exception.Response) {
                 $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
                 if (-not [string]::IsNullOrEmpty($streamReaderResponse)) {
@@ -35,12 +36,15 @@ function Resolve-TriaswebError {
             $errorDetailsObject = ($httpErrorObj.ErrorDetails | ConvertFrom-Json)
             if ($null -ne $errorDetailsObject.Details) {
                 $httpErrorObj.FriendlyMessage = $errorDetailsObject.Details
-            } elseif ($null -ne $errorDetailsObject.error) {
+            }
+            elseif ($null -ne $errorDetailsObject.error) {
                 $httpErrorObj.FriendlyMessage = $errorDetailsObject.error
-            } else {
+            }
+            else {
                 $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
             }
-        } catch {
+        }
+        catch {
             $httpErrorObj.FriendlyMessage = "Error: [$($httpErrorObj.ErrorDetails)] [$($_.Exception.Message)]"
         }
         Write-Output $httpErrorObj
@@ -75,47 +79,42 @@ try {
         Accept         = 'application/json'
     }
 
-    $pageSize = 100
+    $pageSize = 50
     $pageNumber = 1
-    $importedAccounts = @()
     do {
         $splatGetUsers = @{
             Uri         = "$($actionContext.Configuration.BaseUrl)/api/users/list?pageNumber=$($pageNumber)&pageSize=$($pageSize)"
-            Method      = 'Get'
+            Method      = 'GET'
             Certificate = $certificate
             Headers     = $headers
         }
         $response = Invoke-RestMethod @splatGetUsers
-
         if ($response.data) {
-            $importedAccounts += $response.data
+            foreach ($importedAccount in $response.data) {
+                $data = $importedAccount | Select-Object -Property $actionContext.ImportFields
+                # Enabled has a -not filter because the API uses an isDisabled property, which is the exact opposite of the enabled state used by HelloID.
+                Write-Output @{
+                    AccountReference = $importedAccount.Id
+                    DisplayName      = $importedAccount.name
+                    UserName         = $importedAccount.Id
+                    Enabled          = -not($importedAccount.isDisabled)
+                    Data             = $data | Select-Object -Property * -ExcludeProperty managedOrganizationCodes, roleNames, authorizedOrganizationCodes
+                }
+            }
         }
-
         $pageNumber++
     } while ($pageNumber -le $response.totalPages)
-
-    # Map the imported data to the account field mappings
-    foreach ($importedAccount in $importedAccounts) {
-        $data = $importedAccount
-
-        # Enabled has a -not filter because the API uses an isDisabled property, which is the exact opposite of the enabled state used by HelloID.
-        Write-Output @{
-            AccountReference = $importedAccount.Id
-            DisplayName      = $importedAccount.name
-            UserName         = $importedAccount.Id
-            Enabled          = -not($importedAccount.isDisabled)
-            Data             = $data | Select-Object -Property * -ExcludeProperty managedOrganizationCodes, roleNames, authorizedOrganizationCodes
-        }
-    }
     Write-Information 'Account data import completed'
-} catch {
+}
+catch {
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-TriaswebError -ErrorObject $ex
         Write-Warning "Could not import Triasweb account. Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-    } else {
+    }
+    else {
         Write-Warning "Could not import Triasweb account. Error: $($ex.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
