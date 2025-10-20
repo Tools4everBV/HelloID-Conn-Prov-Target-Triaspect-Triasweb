@@ -81,36 +81,29 @@ try {
 
     $pageSize = 50
     $pageNumber = 1
-    $importedAccounts = @()
     do {
         $splatGetUsers = @{
             Uri         = "$($actionContext.Configuration.BaseUrl)/api/users/list?pageNumber=$($pageNumber)&pageSize=$($pageSize)"
-            Method      = 'Get'
+            Method      = 'GET'
             Certificate = $certificate
             Headers     = $headers
         }
         $response = Invoke-RestMethod @splatGetUsers
-
         if ($response.data) {
-            $importedAccounts += $response.data
+            foreach ($importedAccount in $response.data) {
+                $data = $importedAccount | Select-Object -Property $actionContext.ImportFields
+                # Enabled has a -not filter because the API uses an isDisabled property, which is the exact opposite of the enabled state used by HelloID.
+                Write-Output @{
+                    AccountReference = $importedAccount.Id
+                    DisplayName      = $importedAccount.name
+                    UserName         = $importedAccount.Id
+                    Enabled          = -not($importedAccount.isDisabled)
+                    Data             = $data | Select-Object -Property * -ExcludeProperty managedOrganizationCodes, roleNames, authorizedOrganizationCodes
+                }
+            }
         }
-
         $pageNumber++
     } while ($pageNumber -le $response.totalPages)
-
-    # Map the imported data to the account field mappings
-    foreach ($importedAccount in $importedAccounts) {
-        $data = $importedAccount | Select-Object -Property $actionContext.ImportFields
-
-        # Enabled has a -not filter because the API uses an isDisabled property, which is the exact opposite of the enabled state used by HelloID.
-        Write-Output @{
-            AccountReference = $importedAccount.Id
-            DisplayName      = $importedAccount.name
-            UserName         = $importedAccount.Id
-            Enabled          = -not($importedAccount.isDisabled)
-            Data             = $data | Select-Object -Property * -ExcludeProperty managedOrganizationCodes, roleNames, authorizedOrganizationCodes
-        }
-    }
     Write-Information 'Account data import completed'
 }
 catch {

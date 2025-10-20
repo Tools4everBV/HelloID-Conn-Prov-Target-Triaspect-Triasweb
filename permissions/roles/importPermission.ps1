@@ -81,35 +81,30 @@ try {
     Write-Information 'Starting permission data import'
     $pageSize = 50
     $pageNumber = 1
-    $importedAccounts = [System.Collections.Generic.List[object]]::new()
+    $importedPermissions = @{}
     do {
         $splatGetUsers = @{
             Uri         = "$($actionContext.Configuration.BaseUrl)/api/users/list?pageNumber=$($pageNumber)&pageSize=$($pageSize)"
-            Method      = 'Get'
+            Method      = 'GET'
             Certificate = $certificate
             Headers     = $headers
         }
         $response = Invoke-RestMethod @splatGetUsers
 
         if ($response.data) {
-            $importedAccounts.AddRange($response.data)
-        }
-
-        $pageNumber++
-    } while ($pageNumber -le $response.totalPages)
-
-    # Retrieve all unique roleNames from accounts property in accounts.
-    $importedPermissions = @{}
-    foreach ($importedAccount in $importedAccounts) {
-        foreach ($role in $importedAccount.roleNames) {
-            if (![string]::IsNullOrWhiteSpace($role)) {
-                if (-not $importedPermissions.ContainsKey($role)) {
-                    $importedPermissions[$role] = @()
+            foreach ($importedAccount in $response.data) {
+                foreach ($role in $importedAccount.roleNames) {
+                    if (![string]::IsNullOrWhiteSpace($role)) {
+                        if (-not $importedPermissions.ContainsKey($role)) {
+                            $importedPermissions[$role] = @()
+                        }
+                        $importedPermissions[$role] += $importedAccount.id
+                    }
                 }
-                $importedPermissions[$role] += $importedAccount.id
             }
         }
-    }
+        $pageNumber++
+    } while ($pageNumber -le $response.totalPages)
 
     foreach ($importedPermission in $importedPermissions.GetEnumerator()) {
         $permission = @{
@@ -125,7 +120,6 @@ try {
         $batchSize = 500
         for ($i = 0; $i -lt $membersOfRetrievedPermission.Count; $i += $batchSize) {
             $permission.AccountReferences = [array]($membersOfRetrievedPermission.GetRange($i, [Math]::Min($batchSize, $membersOfRetrievedPermission.Count - $i)))
-
             Write-Output $permission
         }
     }

@@ -85,37 +85,32 @@ try {
     Write-Information 'Starting permission data import'
     $pageSize = 50
     $pageNumber = 1
-    $importedAccounts = [System.Collections.Generic.List[object]]::new()
+    $importedPermissions = @{}
     do {
         $splatGetUsers = @{
             Uri         = "$($actionContext.Configuration.BaseUrl)/api/users/list?pageNumber=$($pageNumber)&pageSize=$($pageSize)"
-            Method      = 'Get'
+            Method      = 'GET'
             Certificate = $certificate
             Headers     = $headers
         }
         $response = Invoke-RestMethod @splatGetUsers
 
         if ($response.data) {
-            $importedAccounts.AddRange($response.data)
-        }
-
-        $pageNumber++
-    } while ($pageNumber -le $response.totalPages)
-
-    # Retrieve all unique authorizedOrganizationCodes from accounts property in accounts.
-    $importedPermissions = @{}
-    foreach ($importedAccount in $importedAccounts) {
-        foreach ($authorizedOrganizationCodes in $importedAccount.authorizedOrganizationCodes) {
-            if (![string]::IsNullOrWhiteSpace($authorizedOrganizationCodes)) {
-                if (-not $importedPermissions.ContainsKey($authorizedOrganizationCodes)) {
-                    $importedPermissions[$authorizedOrganizationCodes] = @()
-                }
-                if ($importedAccount.id -notin $importedPermissions[$authorizedOrganizationCodes]) {
-                    $importedPermissions[$authorizedOrganizationCodes] += $importedAccount.id
+            foreach ($importedAccount in $response.data) {
+                foreach ($authorizedOrganizationCodes in $importedAccount.authorizedOrganizationCodes) {
+                    if (![string]::IsNullOrWhiteSpace($authorizedOrganizationCodes)) {
+                        if (-not $importedPermissions.ContainsKey($authorizedOrganizationCodes)) {
+                            $importedPermissions[$authorizedOrganizationCodes] = @()
+                        }
+                        if ($importedAccount.id -notin $importedPermissions[$authorizedOrganizationCodes]) {
+                            $importedPermissions[$authorizedOrganizationCodes] += $importedAccount.id
+                        }
+                    }
                 }
             }
         }
-    }
+        $pageNumber++
+    } while ($pageNumber -le $response.totalPages)
 
     foreach ($importedPermission in $importedPermissions.GetEnumerator()) {
         $subPermissionDisplayName = $($importedPermission.Key).substring(0, [System.Math]::Min(100, $($importedPermission.Key).Length))
@@ -136,7 +131,6 @@ try {
         $batchSize = 500
         for ($i = 0; $i -lt $membersOfRetrievedPermission.Count; $i += $batchSize) {
             $permission.AccountReferences = [array]($membersOfRetrievedPermission.GetRange($i, [Math]::Min($batchSize, $membersOfRetrievedPermission.Count - $i)))
-
             Write-Output $permission
         }
     }
