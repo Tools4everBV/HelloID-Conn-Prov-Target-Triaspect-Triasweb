@@ -56,11 +56,22 @@ try {
     # Initial Assignments
     $outputContext.AccountReference = 'Currently not available'
 
-    $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($actionContext.Configuration.CertificatePath, $actionContext.Configuration.CertificatePassword, 'UserKeySet')
+    if ($actionContext.Configuration.UseBase64Certificate -eq $true) {
+        $actionMessage = 'retrieving certificate from base64 string'
+        $rawCertificate = [system.convert]::FromBase64String($actionContext.Configuration.CertificateBase64String)
+        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($rawCertificate, $actionContext.Configuration.CertificatePassword, [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
+    }
+    else {
+        $actionMessage = 'retrieving certificate from pfx file'
+        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($actionContext.Configuration.CertificatePath, $actionContext.Configuration.CertificatePassword, 'UserKeySet')
+    }
+
+    $actionMessage = 'validating certificate date'
     if ($certificate.NotAfter -le (Get-Date)) {
         throw "Certificate has expired on $($certificate.NotAfter)..."
     }
 
+    $actionMessage = 'retrieving access token'
     $splatTokenParams = @{
         Uri         = "$($actionContext.Configuration.TokenBaseUrl)/connect/token"
         Method      = 'POST'
@@ -82,6 +93,7 @@ try {
     }
 
     # Validate correlation configuration
+    $actionMessage = 'validating correlation configuration'
     if ($actionContext.CorrelationConfiguration.Enabled) {
         $correlationField = $actionContext.CorrelationConfiguration.AccountField
         $correlationValue = $actionContext.CorrelationConfiguration.PersonFieldValue
@@ -93,6 +105,7 @@ try {
             throw 'Correlation is enabled but [accountFieldValue] is empty. Please make sure it is correctly mapped'
         }
 
+        $actionMessage = "correlating account on field: [$correlationField] with value: [$correlationValue]"
         $splatGetUser = @{
             Uri         = "$($actionContext.Configuration.BaseUrl)/api/users?method=$($correlationField)&value=$($correlationValue)"
             Method      = 'Get'
@@ -108,6 +121,8 @@ try {
             }
         }
     }
+
+    $actionMessage = 'calculating actions'
     if (($correlatedAccount | Measure-Object).count -eq 0) {
         $action = 'CreateAccount'
     }
@@ -118,9 +133,12 @@ try {
         throw "Multiple accounts found for person where $correlationField is: [$correlationValue]"
     }
 
+    Write-Information "Action to be executed: $($action)"
+
     # Process
     switch ($action) {
         'CreateAccount' {
+            $actionMessage = 'creating account'
             $splatCreateParams = @{
                 Uri         = "$($actionContext.Configuration.BaseUrl)/api/users"
                 Method      = 'POST'
@@ -136,13 +154,14 @@ try {
                 # Remove default $null value in authorizedOrganizationCodes
                 $createdAccount.authorizedOrganizationCodes = @($createdAccount.authorizedOrganizationCodes | Where-Object { $_ -ne $null })
 
-                $outputContext.Data = ($createdAccount | Select-Object -Property $outputContext.Data.PSObject.Properties.Name)
+                $outputContext.Data = ($createdAccount | Select-Object -Property $outputContext.Data.PSObject.Properties.Name -ExcludeProperty 'roleNames', 'authorizedOrganizationCodes')
                 $outputContext.AccountReference = $createdAccount.Id
             }
             else {
                 Write-Information '[DryRun] Create and correlate Triasweb account, will be executed during enforcement'
             }
 
+            $actionMessage = 'disabling account after creating'
             $splatDisableUserParams = @{
                 Uri         = "$($actionContext.Configuration.BaseUrl)/api/users/close-account?method=id&value=$($outputContext.AccountReference)"
                 Method      = 'PUT'
@@ -163,12 +182,12 @@ try {
         }
 
         'CorrelateAccount' {
-            Write-Information 'Correlating Triasweb account'
+            $actionMessage = 'correlating account'
 
             # Remove default $null value in authorizedOrganizationCodes
             $correlatedAccount.authorizedOrganizationCodes = @($correlatedAccount.authorizedOrganizationCodes | Where-Object { $_ -ne $null })
 
-            $outputContext.Data = ($correlatedAccount | Select-Object -Property $outputContext.data.PSObject.Properties.Name)
+            $outputContext.Data = ($correlatedAccount | Select-Object -Property $outputContext.data.PSObject.Properties.Name -ExcludeProperty 'roleNames', 'authorizedOrganizationCodes')
             $outputContext.AccountReference = $correlatedAccount.Id
             $outputContext.AccountCorrelated = $true
             $auditLogMessage = "Correlated account: [$($outputContext.AccountReference)] on field: [$($correlationField)] with value: [$($correlationValue)]"
@@ -189,11 +208,11 @@ catch {
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-TriaswebError -ErrorObject $ex
-        $auditMessage = "Could not create or correlate Triasweb account. Error: $($errorObj.FriendlyMessage)"
+        $auditMessage = "Error $($actionMessage). Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     }
     else {
-        $auditMessage = "Could not create or correlate Triasweb account. Error: $($ex.Exception.Message)"
+        $auditMessage = "Error $($actionMessage). Error: $($ex.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $outputContext.AuditLogs.Add([PSCustomObject]@{

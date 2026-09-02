@@ -54,15 +54,27 @@ function Resolve-TriaswebError {
 
 try {
     # Verify if [aRef] has a value
+    $actionMessage = 'checking account reference'
     if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
         throw 'The account reference could not be found'
     }
 
-    $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($actionContext.Configuration.CertificatePath, $actionContext.Configuration.CertificatePassword, 'UserKeySet')
+    if ($actionContext.Configuration.UseBase64Certificate -eq $true) {
+        $actionMessage = 'retrieving certificate from base64 string'
+        $rawCertificate = [system.convert]::FromBase64String($actionContext.Configuration.CertificateBase64String)
+        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($rawCertificate, $actionContext.Configuration.CertificatePassword, [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
+    }
+    else {
+        $actionMessage = 'retrieving certificate from pfx file'
+        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($actionContext.Configuration.CertificatePath, $actionContext.Configuration.CertificatePassword, 'UserKeySet')
+    }
+    
+    $actionMessage = 'validating certificate date'
     if ($certificate.NotAfter -le (Get-Date)) {
         throw "Certificate has expired on $($certificate.NotAfter)..."
     }
 
+    $actionMessage = 'retrieving access token'
     $splatTokenParams = @{
         Uri         = "$($actionContext.Configuration.TokenBaseUrl)/connect/token"
         Method      = 'POST'
@@ -83,7 +95,7 @@ try {
         'content-type' = 'application/json-patch+json'
     }
 
-    Write-Information 'Verifying if a Triasweb account exists'
+    $actionMessage = 'retrieving account by account reference'
     $splatGetUser = @{
         Uri         = "$($actionContext.Configuration.BaseUrl)/api/users?method=id&value=$($actionContext.References.Account)"
         Method      = 'Get'
@@ -99,16 +111,25 @@ try {
         }
     }
 
+    $actionMessage = 'calculating actions'
     if ($null -ne $correlatedAccount) {
-        $action = 'EnableAccount'
+        if ($correlatedAccount.isDisabled -eq $true) {
+            $action = 'EnableAccount'
+        }
+        else {
+            $action = 'NoChanges'
+        }
     }
     else {
         $action = 'NotFound'
     }
 
+    Write-Information "Action to be executed: $($action)"
+
     # Process
     switch ($action) {
         'EnableAccount' {
+            $actionMessage = 'enabling account'
             $splatEnableUserParams = @{
                 Uri         = "$($actionContext.Configuration.BaseUrl)/api/users/reopen-account?method=id&value=$($actionContext.References.Account)"
                 Method      = 'PUT'
@@ -124,7 +145,6 @@ try {
                 Write-Information "[DryRun] Enable Triasweb account with accountReference: [$($actionContext.References.Account)], will be executed during enforcement"
             }
 
-
             $outputContext.Success = $true
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     Message = 'Enable account was successful'
@@ -133,7 +153,20 @@ try {
             break
         }
 
+        'NoChanges' {
+            $actionMessage = 'account already enabled'
+            Write-Information "Triasweb account: [$($actionContext.References.Account)] is already enabled"
+    
+            $outputContext.Success = $true
+            $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Message = "Triasweb account: [$($actionContext.References.Account)] is already enabled"
+                    IsError = $false
+                }) 
+            break
+        }
+
         'NotFound' {
+            $actionMessage = 'account not found'
             Write-Information "Triasweb account: [$($actionContext.References.Account)] could not be found, indicating that it may have been deleted"
             $outputContext.Success = $false
             $outputContext.AuditLogs.Add([PSCustomObject]@{
@@ -150,11 +183,11 @@ catch {
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-TriaswebError -ErrorObject $ex
-        $auditMessage = "Could not enable Triasweb account. Error: $($errorObj.FriendlyMessage)"
+        $auditMessage = "Error $($actionMessage). Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     }
     else {
-        $auditMessage = "Could not enable Triasweb account. Error: $($_.Exception.Message)"
+        $auditMessage = "Error $($actionMessage). Error: $($_.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $outputContext.AuditLogs.Add([PSCustomObject]@{

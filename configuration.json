@@ -21,22 +21,34 @@
     "type": "input"
   },
   {
-    "defaultValue": "",
+    "defaultValue": "https://portaal.triasweb.nl",
     "key": "BaseUrl",
     "templateOptions": {
-      "description": "The URL to the API.",
+      "description": "The URL to the API. Default values: https://api-acceptatie.triasweb.nl or https://api.triasweb.nl",
+      "placeholder": "https://api.triasweb.nl",
       "label": "BaseUrl",
       "required": true
     },
     "type": "input"
   },
   {
-    "defaultValue": "",
+    "defaultValue": "https://portaal.triasweb.nl",
     "key": "TokenBaseUrl",
     "templateOptions": {
-      "description": "The URL to retrieve the API access token.",
+      "description": "The URL to retrieve the API access token. Default values: https://accportaal.triasweb.nl or https://portaal.triasweb.nl",
+      "placeholder": "https://portaal.triasweb.nl",
       "label": "TokenBaseUrl",
       "required": true
+    },
+    "type": "input"
+  },
+  {
+    "defaultValue": "",
+    "key": "certificatePassword",
+    "templateOptions": {
+      "label": "Certificate Password",
+      "required": true,
+      "type": "password"
     },
     "type": "input"
   },
@@ -46,15 +58,27 @@
     "templateOptions": {
       "label": "Certificate (.PFX) Path",
       "placeholder": "<FullPath to Certificate>",
-      "required": true
+      "required": false
     },
     "type": "input"
   },
   {
-    "key": "certificatePassword",
+    "defaultValue": false,
+    "key": "UseBase64Certificate",
     "templateOptions": {
-      "label": "Certificate Password",
-      "required": true,
+      "description": "Check this box if you want to use a base64 encoded certificate instead of a .PFX file.",
+      "label": "Use Base64 Certificate",
+      "required": false
+    },
+    "type": "checkbox"
+  },
+  {
+    "defaultValue": "",
+    "key": "CertificateBase64String",
+    "templateOptions": {
+      "label": "Certificate Base64 String",
+      "placeholder": "<Base64 String of Certificate>",
+      "required": false,
       "type": "password"
     },
     "type": "input"
