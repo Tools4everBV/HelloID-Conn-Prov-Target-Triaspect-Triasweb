@@ -58,15 +58,27 @@ function Resolve-TriaswebError {
 
 try {
     # Verify if [aRef] has a value
+    $actionMessage = 'checking account reference'
     if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
         throw 'The account reference could not be found'
     }
 
-    $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($actionContext.Configuration.CertificatePath, $actionContext.Configuration.CertificatePassword, 'UserKeySet')
+    if ($actionContext.Configuration.UseBase64Certificate -eq $true) {
+        $actionMessage = 'retrieving certificate from base64 string'
+        $rawCertificate = [system.convert]::FromBase64String($actionContext.Configuration.CertificateBase64String)
+        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($rawCertificate, $actionContext.Configuration.CertificatePassword, [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
+    }
+    else {
+        $actionMessage = 'retrieving certificate from pfx file'
+        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($actionContext.Configuration.CertificatePath, $actionContext.Configuration.CertificatePassword, 'UserKeySet')
+    }
+    
+    $actionMessage = 'validating certificate date'
     if ($certificate.NotAfter -le (Get-Date)) {
         throw "Certificate has expired on $($certificate.NotAfter)..."
     }
 
+    $actionMessage = 'retrieving access token'
     $splatTokenParams = @{
         Uri         = "$($actionContext.Configuration.TokenBaseUrl)/connect/token"
         Method      = 'POST'
@@ -87,7 +99,7 @@ try {
         'content-type' = 'application/json'
     }
 
-    Write-Information 'Verifying if a Triasweb account exists'
+    $actionMessage = 'retrieving account'
     $splatGetUser = @{
         Uri         = "$($actionContext.Configuration.BaseUrl)/api/users?method=id&value=$($actionContext.References.Account)"
         Method      = 'GET'
@@ -109,19 +121,22 @@ try {
     $desiredPermissions = @()
     $desiredPermissionsExportList = @{}
     if (-Not($actionContext.Operation -eq "revoke")) {
+        $actionMessage = 'calculating desired sub-permissions'
         foreach ($contract in $personContext.Person.Contracts) {
             Write-Information "Contract: $($contract.ExternalId). In condition: $($contract.Context.InConditions)"
-            if ($contract.Context.InConditions -OR ($actionContext.DryRun -eq $true)) {
+            if ($contract.Context.InConditions) {
                 $desiredPermissions += ($contract | Select-Object $authorizationOrganizationCodesLookupKey).$authorizationOrganizationCodesLookupKey
                 $desiredPermissionsExportList["$(($contract | Select-Object $authorizationOrganizationCodesLookupKey).$authorizationOrganizationCodesLookupKey)"] = $($contract | Select-Object $authorizationOrganizationNameLookupKey).$authorizationOrganizationNameLookupKey
             }
         }
     }
 
+    $actionMessage = 'checking amount of desired permissions'
     if ($actionContext.Operation -match "update|grant" -AND $desiredPermissions.count -eq 0) {
         throw "Error no desire permissions found. Make sure [$authorizationOrganizationCodesLookupKey] is filled on all contracts"
     }
 
+    $actionMessage = 'calculating permissions'
     $currentPermissions = $actionContext.CurrentPermissions.Reference.Id
     $desiredPermissions = $desiredPermissions | Sort-Object -Unique
     $currentPermissions = $currentPermissions | Sort-Object -Unique    
@@ -139,6 +154,7 @@ try {
         $authorizedOrganizationCodesChanged = $true
     }
 
+    $actionMessage = 'calculating actions'
     if ([string]::IsNullOrEmpty($correlatedAccount)) {
         $action = 'NotFound'
     }
@@ -149,9 +165,12 @@ try {
         $action = 'NoChanges'
     }
 
+    Write-Information "Action to be executed: $($action)"
+
     # Process
     switch ($action) {
         'UpdateAccount' {
+            $actionMessage = 'updating authorized organization codes'
             Write-Information "Account property authorizedOrganizationCodes required to update, new value(s) will be: $($desiredPermissions -join ', ')."
             $correlatedAccount.authorizedOrganizationCodes = @($desiredPermissions)
 
@@ -180,12 +199,14 @@ try {
         }
 
         'NoChanges' {
+            $actionMessage = 'no changes to authorized organization codes'
             Write-Information "No changes to Triasweb account with accountReference: [$($actionContext.References.Account)]"
             $outputContext.Success = $true
             break
         }
 
         'NotFound' {
+            $actionMessage = 'account not found'
             Write-Information "Triasweb account: [$($actionContext.References.Account)] could not be found, indicating that it may have been deleted"
             if ($actionContext.Operation -eq "revoke") {
                 $outputContext.Success = $true
@@ -201,6 +222,7 @@ try {
         }
     }
 
+    $actionMessage = 'returning desired permissions'
     $desiredPermissionsExportList = $desiredPermissionsExportList | Sort-Object Name -Unique
     foreach ($permission in $desiredPermissionsExportList.GetEnumerator()) {
         $outputContext.SubPermissions.Add([PSCustomObject]@{
@@ -215,11 +237,11 @@ catch {
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-TriaswebError -ErrorObject $ex
-        $auditMessage = "Could not grant Triasweb permission. Error: $($errorObj.FriendlyMessage)"
+        $auditMessage = "Error $($actionMessage). Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     }
     else {
-        $auditMessage = "Could not grant Triasweb permission. Error: $($_.Exception.Message)"
+        $auditMessage = "Error $($actionMessage). Error: $($_.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $outputContext.AuditLogs.Add([PSCustomObject]@{

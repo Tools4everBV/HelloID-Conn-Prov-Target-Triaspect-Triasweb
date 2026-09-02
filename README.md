@@ -16,6 +16,7 @@
   - [Getting started](#getting-started)
     - [Prerequisites](#prerequisites)
     - [Connection settings](#connection-settings)
+      - [Convert a .pfx file to a Base64 string](#convert-a-pfx-file-to-a-base64-string)
     - [Correlation configuration](#correlation-configuration)
     - [Field mapping](#field-mapping)
     - [Script Mapping](#script-mapping)
@@ -61,21 +62,35 @@ The following features are available:
 - **HR sync**:<br>
  The HR sync needs to be turned off, more information can be found at the HR sync off warning in the [Remarks](#remarks) below.
 
-- **On premise HelloID Agent**:<br>
- A on premise HelloID is required, more information can be found at the HR sync off warning in the [Remarks](#remarks) below..
-
 ### Connection settings
 
 The following settings are required to connect to the API.
 
-| Setting              | Description                        | Mandatory |
-| -------------------- | ---------------------------------- | --------- |
-| ClientId             | The UserName to connect to the API | Yes       |
-| ClientSecret         | The Password to connect to the API | Yes       |
-| BaseUrl              | The URL to the API                 | Yes       |
-| TokenBaseUrl         | The URL to retrieve the API token  | Yes       |
-| Certificate path     | The full path to .PFX file         | Yes       |
-| Certificate password | The Password of the .PFX file      | Yes       |
+| Setting                   | Description                                                                     | Mandatory |
+| ------------------------- | ------------------------------------------------------------------------------- | --------- |
+| ClientId                  | The client ID used to authenticate with the API                                 | Yes       |
+| ClientSecret              | The client secret used to authenticate with the API                             | Yes       |
+| BaseUrl                   | The base URL of the API                                                         | Yes       |
+| TokenBaseUrl              | The URL used to retrieve an API access token                                    | Yes       |
+| Certificate password      | The password of the certificate                                                 | Yes       |
+| Certificate path          | The full path to the `.pfx` file. Required when using a `.pfx` file.            | No        |
+| Use Base64 Certificate    | Enable this option to use a Base64-encoded certificate instead of a `.pfx` file | No        |
+| Certificate Base64 String | The Base64-encoded certificate. Required when using a Base64 certificate.       | No        |
+
+> [!NOTE]
+> When using a `.pfx` file, a HelloID On-Premises Agent is required.
+
+#### Convert a .pfx file to a Base64 string
+
+If the connector needs to run on the Cloud Agent, the `.pfx` file must be converted to a Base64 string. The example below shows how to convert a `.pfx` file to a Base64 string.
+
+```powershell
+$filePath = 'C:\HelloID'
+$pfxName = "Tools4Ever.pfx"
+$pfxBytes = [System.IO.File]::ReadAllBytes("$filePath\$pfxName")
+$base64 = [System.Convert]::ToBase64String($pfxBytes)
+[System.IO.File]::WriteAllText("$filePath\HelloID_Cert_Base64.txt", $base64)
+```
 
 
 ### Correlation configuration
@@ -175,9 +190,6 @@ The following endpoints are used by the connector
 
 > [!TIP]
 > _For more information on how to configure a HelloID PowerShell connector, please refer to our [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems.html) pages_.
-
-> [!TIP]
->  _If you need help, feel free to ask questions on our [forum](https://forum.helloid.com/forum/helloid-connectors/provisioning/5376-helloid-conn-prov-target-triaspect-triasweb)_.
 
 ## HelloID docs
 

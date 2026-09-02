@@ -55,15 +55,27 @@ function Resolve-TriaswebError {
 # Begin
 try {
     # Verify if [aRef] has a value
+    $actionMessage = 'checking account reference'
     if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
         throw 'The account reference could not be found'
     }
 
-    $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($actionContext.Configuration.CertificatePath, $actionContext.Configuration.CertificatePassword, 'UserKeySet')
+    if ($actionContext.Configuration.UseBase64Certificate -eq $true) {
+        $actionMessage = 'retrieving certificate from base64 string'
+        $rawCertificate = [system.convert]::FromBase64String($actionContext.Configuration.CertificateBase64String)
+        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($rawCertificate, $actionContext.Configuration.CertificatePassword, [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
+    }
+    else {
+        $actionMessage = 'retrieving certificate from pfx file'
+        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($actionContext.Configuration.CertificatePath, $actionContext.Configuration.CertificatePassword, 'UserKeySet')
+    }
+    
+    $actionMessage = 'validating certificate date'
     if ($certificate.NotAfter -le (Get-Date)) {
         throw "Certificate has expired on $($certificate.NotAfter)..."
     }
 
+    $actionMessage = 'retrieving access token'
     $splatTokenParams = @{
         Uri         = "$($actionContext.Configuration.TokenBaseUrl)/connect/token"
         Method      = 'POST'
@@ -84,7 +96,7 @@ try {
         'content-type' = 'application/json'
     }
 
-    Write-Information 'Verifying if a Triasweb account exists'
+    $actionMessage = 'retrieving account'
     $splatGetUser = @{
         Uri         = "$($actionContext.Configuration.BaseUrl)/api/users?method=id&value=$($actionContext.References.Account)"
         Method      = 'Get'
@@ -100,6 +112,7 @@ try {
         }
     }
 
+    $actionMessage = 'calculating actions'
     if ($null -ne $correlatedAccount) {
         $action = 'GrantPermission'
     }
@@ -107,9 +120,12 @@ try {
         $action = 'NotFound'
     }
 
+    Write-Information "Action to be executed: $($action)"
+
     # Process
     switch ($action) {
         'GrantPermission' {
+            $actionMessage = 'granting permission'
             if (-not($correlatedAccount.roleNames -contains $actionContext.References.Permission.Reference)) {
                 $correlatedAccount.roleNames += $actionContext.References.Permission.Reference
                 $correlatedAccount.authorizedOrganizationCodes = @($correlatedAccount.authorizedOrganizationCodes | Where-Object { ($_ -ne $null) -and ($_ -notmatch ',') })
@@ -148,6 +164,7 @@ try {
         }
 
         'NotFound' {
+            $actionMessage = 'account not found'
             Write-Information "Triasweb account: [$($actionContext.References.Account)] could not be found, indicating that it may have been deleted"
             $outputContext.Success = $false
             $outputContext.AuditLogs.Add([PSCustomObject]@{
@@ -164,11 +181,11 @@ catch {
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-TriaswebError -ErrorObject $ex
-        $auditMessage = "Could not grant Triasweb permission. Error: $($errorObj.FriendlyMessage)"
+        $auditMessage = "Error $($actionMessage). Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     }
     else {
-        $auditMessage = "Could not grant Triasweb permission. Error: $($_.Exception.Message)"
+        $auditMessage = "Error $($actionMessage). Error: $($_.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $outputContext.AuditLogs.Add([PSCustomObject]@{
