@@ -28,8 +28,8 @@
             "Create",
             "Update"
           ],
-          "MappingMode": "Field",
-          "Value": "\"Person.Name.NickName\"",
+          "MappingMode": "Complex",
+          "Value": "\"// generateDisplayNameOption1.js [https://github.com/Tools4everBV/HelloID-Lib-Prov-HelperFunctions/blob/master/Javascript/Target/DisplayName/Scripts/generateDisplayNameOption1.js]\\r\\n//\\r\\n// Mapping logic to generate the DisplayName according to the following convention.\\r\\n// B\\tJanine van den Boele\\r\\n// BP\\tJanine van den Boele – de Vries\\r\\n// P\\tJanine de Vries\\r\\n// PB   Janine de Vries – van den Boele\\r\\nfunction generateDisplayName() {\\r\\n    let nickName = Person.Name.NickName;\\r\\n    let middleName = Person.Name.FamilyNamePrefix;\\r\\n    let lastName = Person.Name.FamilyName;\\r\\n    let middleNamePartner = Person.Name.FamilyNamePartnerPrefix;\\r\\n    let lastNamePartner = Person.Name.FamilyNamePartner;\\r\\n    let convention = Person.Name.Convention;\\r\\n\\r\\n    let displayName = '';\\r\\n    switch (convention) {\\r\\n        case \\\"BP\\\":\\r\\n            displayName = displayName + nickName + ' ';\\r\\n            if (typeof middleName !== 'undefined' && middleName) { displayName = displayName + middleName + ' ' }\\r\\n            displayName = displayName + lastName;\\r\\n\\r\\n            displayName = displayName + ' - ';\\r\\n            if (typeof middleNamePartner !== 'undefined' && middleNamePartner) { displayName = displayName + middleNamePartner + ' ' }\\r\\n            displayName = displayName + lastNamePartner;\\r\\n            break;\\r\\n        case \\\"PB\\\":\\r\\n            displayName = displayName + nickName + ' ';\\r\\n            if (typeof middleNamePartner !== 'undefined' && middleNamePartner) { displayName = displayName + middleNamePartner + ' ' }\\r\\n            displayName = displayName + lastNamePartner;\\r\\n\\r\\n            displayName = displayName + ' - ';\\r\\n            if (typeof middleName !== 'undefined' && middleName) { displayName = displayName + middleName + ' ' }\\r\\n            displayName = displayName + lastName;\\r\\n            break;\\r\\n        case \\\"P\\\":\\r\\n            displayName = displayName + nickName + ' ';\\r\\n            if (typeof middleNamePartner !== 'undefined' && middleNamePartner) { displayName = displayName + middleNamePartner + ' ' }\\r\\n            displayName = displayName + lastNamePartner;\\r\\n            break;\\r\\n        case \\\"B\\\":\\r\\n        default:\\r\\n            displayName = displayName + nickName + ' ';\\r\\n            if (typeof middleName !== 'undefined' && middleName) { displayName = displayName + middleName + ' ' }\\r\\n            displayName = displayName + lastName;\\r\\n            break;\\r\\n    }\\r\\n    // Trim spaces at start and end\\r\\n    displayName = displayName.trim();\\r\\n\\r\\n    // Shorten string to maxAttributeLength \\r\\n    const maxAttributeLength = 256;\\r\\n    displayName = displayName.substring(0, maxAttributeLength);\\r\\n\\r\\n    return displayName;\\r\\n}\\r\\n\\r\\ngenerateDisplayName();\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }
@@ -83,6 +83,23 @@
           "Value": "\"function getValue() {\\r\\n    return new Array(0);\\r\\n}\\r\\n\\r\\ngetValue();\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "id",
+      "Description": "",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "None",
+          "Value": "\"\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": true
         }
       ]
     }

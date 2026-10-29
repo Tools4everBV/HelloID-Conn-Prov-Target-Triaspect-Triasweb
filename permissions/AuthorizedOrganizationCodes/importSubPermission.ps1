@@ -8,7 +8,6 @@
 
 # Configure, must be the same as the values used in retrieve permissions
 $permissionReference = 'authorizationOrganizationCodes'
-$permissionDisplayName = 'authorizationOrganizationCodes'
 
 #region functions
 function Resolve-TriaswebError {
@@ -57,11 +56,22 @@ function Resolve-TriaswebError {
 #endregion
 
 try {
-    $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($actionContext.Configuration.CertificatePath, $actionContext.Configuration.CertificatePassword, 'UserKeySet')
+    if ($actionContext.Configuration.UseBase64Certificate -eq $true) {
+        $actionMessage = 'retrieving certificate from base64 string'
+        $rawCertificate = [system.convert]::FromBase64String($actionContext.Configuration.CertificateBase64String)
+        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($rawCertificate, $actionContext.Configuration.CertificatePassword, [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
+    }
+    else {
+        $actionMessage = 'retrieving certificate from pfx file'
+        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($actionContext.Configuration.CertificatePath, $actionContext.Configuration.CertificatePassword, 'UserKeySet')
+    }
+    
+    $actionMessage = 'validating certificate date'
     if ($certificate.NotAfter -le (Get-Date)) {
         throw "Certificate has expired on $($certificate.NotAfter)..."
     }
 
+    $actionMessage = 'retrieving access token'
     $splatTokenParams = @{
         Uri         = "$($actionContext.Configuration.TokenBaseUrl)/connect/token"
         Method      = 'POST'
@@ -87,6 +97,7 @@ try {
     $pageNumber = 1
     $importedPermissions = @{}
     do {
+        $actionMessage = "retrieving sub-permission import page [$pageNumber]"
         $splatGetUsers = @{
             Uri         = "$($actionContext.Configuration.BaseUrl)/api/users/list?pageNumber=$($pageNumber)&pageSize=$($pageSize)"
             Method      = 'GET'
@@ -113,12 +124,12 @@ try {
     } while ($pageNumber -le $response.totalPages)
 
     foreach ($importedPermission in $importedPermissions.GetEnumerator()) {
+        $actionMessage = "importing sub-permission [$($importedPermission.Key)]"
         $subPermissionDisplayName = $($importedPermission.Key).substring(0, [System.Math]::Min(100, $($importedPermission.Key).Length))
         $permission = @{
             PermissionReference      = @{
                 Reference = $permissionReference
             }       
-            DisplayName              = $permissionDisplayName
             AccountReferences        = $importedPermission.Value
             SubPermissionReference   = @{
                 Id = $importedPermission.Key
@@ -141,11 +152,11 @@ catch {
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-TriaswebError -ErrorObject $ex
-        Write-Warning "Could not import Triasweb permission. Error: $($errorObj.FriendlyMessage)"
+        Write-Warning "Error $($actionMessage). Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     }
     else {
-        Write-Warning "Could not import Triasweb permission. Error: $($ex.Exception.Message)"
+        Write-Warning "Error $($actionMessage). Error: $($ex.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
 }
